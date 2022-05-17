@@ -15,7 +15,7 @@ from dataloader import CustomDataLoader
 # load args
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=4)
+parser.add_argument('--ex_index', type=str, default=5)
 parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT*, WebNLG*")
 parser.add_argument('--mode', type=str, default="test")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
@@ -182,7 +182,7 @@ def evaluate(model, dataloader, params, ex_params, mark='Val'):
             t.update(1)
     metrics = get_metrics(correct_num, predict_num, gold_num) #包含传入三个参数，还包含精确度，召回，F1
     metrics_str = "; ".join("{}: {:05.3f}".format(k, v) for k, v in metrics.items())
-    print("- {} metrics:\n".format('Val') + metrics_str)
+    print("- {} metrics:\n".format(mark) + metrics_str)
     return metrics
 
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser()
 parser = argparse.ArgumentParser()
 parser.add_argument('--min_num', default=1e-7, type=float)
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=5)
+parser.add_argument('--ex_index', type=str, default=6)
 parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT*, WebNLG*")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
 parser.add_argument('--epoch_num',  type=int, default=100, help="number of epochs") #required=True,
@@ -117,6 +117,7 @@ def train_and_evaluate(model, params, ex_params, restore_file=None):
     dataloader = CustomDataLoader(params)
     train_loader = dataloader.get_dataloader(data_sign='train', ex_params=ex_params)
     val_loader = dataloader.get_dataloader(data_sign='val', ex_params=ex_params)
+    test_loader = dataloader.get_dataloader(data_sign='test', ex_params=ex_params)
     print("加载数据完毕")
     # reload weights from restore_file if specified
     if restore_file is not None: #加载模型参数，如果存在
@@ -163,6 +164,7 @@ def train_and_evaluate(model, params, ex_params, restore_file=None):
         # Train for one epoch on training set
         train(model, train_loader, optimizer, scheduler, losstor, p_r_loss, params, ex_params) #train
         val_metrics = evaluate(model, val_loader, params, ex_params, mark='Val') #evaluate
+        test_metrics = evaluate(model, test_loader, params, ex_params, mark='test')
         val_f1 = val_metrics['f1'] # 得到F1分数
         improve_f1 = val_f1 - best_val_f1
 
