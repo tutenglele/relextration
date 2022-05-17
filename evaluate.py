@@ -15,8 +15,8 @@ from dataloader import CustomDataLoader
 # load args
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=3)
-parser.add_argument('--corpus_type', type=str, default="NYT", help="NYT, WebNLG, NYT*, WebNLG*")
+parser.add_argument('--ex_index', type=str, default=4)
+parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT*, WebNLG*")
 parser.add_argument('--mode', type=str, default="test")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
 parser.add_argument('--restore_file', default='last', help="name of the file containing weights to reload")
@@ -122,7 +122,7 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
                 o_loc.append(o) # o[start, end]
 
     with torch.no_grad():
-        p_r = model.p_r_pred(torch.tensor(rel).to("cuda"))
+        p_r = model.p_r_pred(torch.tensor(rel).to("cuda"), torch.tensor(cls).to("cuda"))
         p_r = p_r.cpu().detach().numpy()
         p_r_label = np.where(p_r>0.5, np.ones(p_r.shape), np.zeros(p_r.shape))
         # print("p_r: ", p_r_label)

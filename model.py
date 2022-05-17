@@ -148,6 +148,7 @@ class BertForRE(BertPreTrainedModel):
         self.o_classier_from_s = nn.Linear(config.hidden_size, 2)
         # 潜在关系注意力融合 潜在关系注意力机制
         self.self_attention = Self_attention(config.hidden_size, config.hidden_size, config.hidden_size)
+        self.p_classier = nn.Linear(config.hidden_size, params.rel_num)
         #基于主体和o，做双仿射关系分类
         #p
         self.biaffine=Biaffine(config.hidden_size, config.hidden_size, params.rel_num)
@@ -175,15 +176,15 @@ class BertForRE(BertPreTrainedModel):
         head, tail, rel, cls = self.get_embed(input_ids, attention_mask)
         s_pred = self.s_pred(head, cls) #bs seqlen 2
         o_pred = self.o_pred_from_s(s2o_loc, head, tail, cls) #s2o_loc bs,seqlen,2
-        p_r_pred = self.p_r_pred(rel)
+        p_r_pred = self.p_r_pred(rel, cls)
         r_pred= self.r_pred_from_so(so_mask, p_r_label, head, tail)
         return s_pred, o_pred, p_r_pred, r_pred
 
-    def extract_entity(self, input, mask):
+    def extract_entity(self, input, mask): # input :bs,seqlen,h  mask:bs,seqlen
         _, _, dim = input.shape
         entity = input * mask.unsqueeze(dim=-1)
         entity = entity.sum(dim=1) / mask.sum(dim=-1, keepdim=True)  # BH/B1
-        return entity
+        return entity #bs h
     def get_p_r_embedding(self, p_r):
         #p_r 为bs，rel
         em = torch.arange(0, self.rel_num).to("cuda")
@@ -197,7 +198,10 @@ class BertForRE(BertPreTrainedModel):
         #做pooling
         p_r = p_r_.sum(dim=1) / p_r.sum(dim=1, keepdim=True)
         return p_r # bs, h
-    def p_r_pred(self, p_r):
+    def p_r_pred(self, p_r, cls):
+        #p_r:bs,seqlen,h
+        p_r = p_r.mean(dim=1)+cls
+        p_r = self.p_classier(p_r)
         return self.sigmoid(p_r)
 
     def p_r_attention(self, rel, sub, entity_mask):
@@ -240,13 +244,14 @@ class BertForRE(BertPreTrainedModel):
         sequence_output = outputs[0]
         head = self.w1(sequence_output) # bs, seqlen, h
         tail = self.w2(sequence_output)
-        # rel = self.w3(sequence_output) # bs seqlen R
-        # rel = rel.sum(dim=1) / attention_mask.sum(dim=-1, keepdim=True) # bs R
+        #rel 通过cls
         cls = outputs[1] # bs, h
-        rel = self.w3(self.dropout(cls)) # bs, r
+        # rel = self.w3(self.dropout(cls)) # bs, r
+        # #rel 通过sequence_output
+        rel = self.w3(sequence_output)
         head = head + tail[:, 0, :].unsqueeze(dim=1) #tail[:,0,:]维度为bs,h, unsqueeze bs,1,h
         tail = tail + head[:, 0, :].unsqueeze(dim=1) #s,o都融合cls句子信息
-        head, tail, rel, cls = self.dropout(head), self.dropout(tail), rel, self.dropout(cls)
+        head, tail, rel, cls = self.dropout(head), self.dropout(tail), self.dropout(rel), self.dropout(cls)
         return head, tail, rel, cls
 
 
