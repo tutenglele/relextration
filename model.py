@@ -140,7 +140,7 @@ class BertForRE(BertPreTrainedModel):
         # 分别得到sor的隐藏表
         self.w1 = nn.Linear(config.hidden_size, config.hidden_size)
         self.w2 = nn.Linear(config.hidden_size, config.hidden_size)
-        self.w3 = nn.Linear(config.hidden_size, params.rel_num)
+        self.w3 = nn.Linear(config.hidden_size, config.hidden_size)
         self.p_r_embedding = nn.Embedding(params.rel_num, config.hidden_size) #建立潜在关系查询表
         # 主体
         self.s_classier = nn.Linear(config.hidden_size, 2)
