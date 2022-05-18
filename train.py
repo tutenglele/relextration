@@ -65,7 +65,7 @@ def train(model, dataloader, optimizer, scheduler,losstor, p_r_lossor, params, e
     '''
     model.train()
     epoch_loss = 0
-    with tqdm(total=dataloader.__len__(), desc="train", ncols=120) as t:
+    with tqdm(total=dataloader.__len__(), desc="train", ncols=150) as t:
         for i, batch in enumerate(dataloader):
             batch = [d.to("cuda") for d in batch]
             batch_input_ids, batch_attention_mask, batch_sub_labels, batch_s_mask, batch_s2o_loc, batch_obj_labels, batch_sub_ids, \

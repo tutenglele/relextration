@@ -168,7 +168,7 @@ class BertForRE(BertPreTrainedModel):
         head, tail, rel, cls = self.get_embed(input_ids, attention_mask)
         s_pred = self.s_pred(head, cls) #bs seqlen 2
         o_pred = self.o_pred_from_s(s2o_loc, head, tail, cls) #s2o_loc bs,seqlen,2
-        p_r_pred = self.p_r_pred(rel, cls)
+        p_r_pred = self.p_r_pred(cls)
         r_pred= self.r_pred_from_so(so_mask, p_r_label, head, tail, rel)
         return s_pred, o_pred, p_r_pred, r_pred
 
@@ -190,10 +190,10 @@ class BertForRE(BertPreTrainedModel):
         #做pooling
         p_r = p_r_.sum(dim=1) / p_r.sum(dim=1, keepdim=True)
         return p_r # bs, h
-    def p_r_pred(self, p_r, cls):
+    def p_r_pred(self, cls):
         #p_r:bs,seqlen,h
-        p_r = p_r.mean(dim=1)+cls
-        p_r = self.p_classier(p_r)
+        # p_r = p_r.mean(dim=1)+cls
+        p_r = self.p_classier(cls)
         return self.sigmoid(p_r)
 
     def p_r_attention(self, rel, sub, entity_mask):
