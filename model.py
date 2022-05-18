@@ -37,15 +37,16 @@ class Rel_embedding(nn.Module): #就是一个全连接+激活函数sigmoid
     def __init__(self, input_size, output_size, dropout_rate): #
         super(Rel_embedding, self).__init__()
         self.input_size = input_size
-        self.linear = nn.Linear(input_size, int(output_size / 2)) #inputdim  outputdim
-        self.hidden2tag = nn.Linear(int(output_size / 2), self.output_size) #
+        self.output_size = output_size
+        self.linear = nn.Linear(input_size, int(output_size // 2)) #inputdim  outputdim
+        self.rel2hidden = nn.Linear(int(output_size // 2), self.output_size) #
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, input_features):
         features_tmp = self.linear(input_features)
         features_tmp = nn.ReLU()(features_tmp)
         features_tmp = self.dropout(features_tmp)
-        features_output = self.hidden2tag(features_tmp)
+        features_output = self.rel2hidden(features_tmp)
         return features_output
 
 class Biaffine(nn.Module):
@@ -184,7 +185,7 @@ class BertForRE(BertPreTrainedModel):
         head, tail, rel, cls = self.get_embed(input_ids, attention_mask)
         s_pred = self.s_pred(head, cls) #bs seqlen 2
         o_pred = self.o_pred_from_s(s2o_loc, head, tail, cls) #s2o_loc bs,seqlen,2
-        p_r_pred = self.p_r_pred(cls)
+        p_r_pred = self.p_r_pred(rel, cls)
         r_pred= self.r_pred_from_so(so_mask, p_r_label, head, tail, rel)
         return s_pred, o_pred, p_r_pred, r_pred
 
@@ -206,12 +207,12 @@ class BertForRE(BertPreTrainedModel):
         # #做pooling
         # p_r = p_r_.sum(dim=1) / p_r.sum(dim=1, keepdim=True)
         # 直接对潜在关系采用全连接的方式， bs,r -> bs h 需要考虑到维度
-        p_r = self.p_r_embedding(p_r)
+        p_r = self.p_r_embedding(p_r.float())
         return p_r # bs, h
-    def p_r_pred(self, cls):
+    def p_r_pred(self, p_r, cls):
         #p_r:bs,seqlen,h
-        # p_r = p_r.mean(dim=1)+cls
-        p_r = self.p_classier(cls)
+        p_r = p_r.mean(dim=1)+cls
+        p_r = self.p_classier(p_r)
         return self.sigmoid(p_r)
 
     def p_r_attention(self, rel, sub, entity_mask):
