@@ -33,6 +33,21 @@ class Self_attention(nn.Module):
             torch.bmm(Q, K.permute(0, 2, 1))) * self._norm_fact  # Q * K.T() # batch_size * seq_len * seq_len
         output = torch.bmm(atten, V)  # Q * K.T() * V # batch_size * seq_len * dim_v
         return output
+class Rel_embedding(nn.Module): #就是一个全连接+激活函数sigmoid
+    def __init__(self, input_size, output_size, dropout_rate): #
+        super(Rel_embedding, self).__init__()
+        self.input_size = input_size
+        self.linear = nn.Linear(input_size, int(output_size / 2)) #inputdim  outputdim
+        self.hidden2tag = nn.Linear(int(output_size / 2), self.output_size) #
+        self.dropout = nn.Dropout(dropout_rate)
+
+    def forward(self, input_features):
+        features_tmp = self.linear(input_features)
+        features_tmp = nn.ReLU()(features_tmp)
+        features_tmp = self.dropout(features_tmp)
+        features_output = self.hidden2tag(features_tmp)
+        return features_output
+
 class Biaffine(nn.Module):
     def __init__(self, in1_features, in2_features, out_features, bias=(True, True, True)):
         super(Biaffine, self).__init__()
@@ -141,7 +156,8 @@ class BertForRE(BertPreTrainedModel):
         self.w1 = nn.Linear(config.hidden_size, config.hidden_size)
         self.w2 = nn.Linear(config.hidden_size, config.hidden_size)
         self.w3 = nn.Linear(config.hidden_size, config.hidden_size)
-        self.p_r_embedding = nn.Embedding(params.rel_num, config.hidden_size) #建立潜在关系查询表
+        # self.p_r_embedding = nn.Embedding(params.rel_num, config.hidden_size) #建立潜在关系查询表
+        self.p_r_embedding = Rel_embedding(params.rel_num, config.hidden_size, params.drop_prob)
         # s
         self.s_classier = nn.Linear(config.hidden_size, 2)
         #o
@@ -179,16 +195,18 @@ class BertForRE(BertPreTrainedModel):
         return entity #bs h
     def get_p_r_embedding(self, p_r):
         #p_r 为bs，rel
-        em = torch.arange(0, self.rel_num).to("cuda")
-        em = self.p_r_embedding(em) #r, h
-        _, hidden = em.shape
-        batch, _ = p_r.shape
-        em = torch.stack([em]*batch, dim=0) # bs, r, h
-        m = torch.stack([p_r]*hidden, dim=2) #bs, r, h
-        m = m.float()
-        p_r_ = torch.where(m != 0, em, m) #bs, r, h
-        #做pooling
-        p_r = p_r_.sum(dim=1) / p_r.sum(dim=1, keepdim=True)
+        # em = torch.arange(0, self.rel_num).to("cuda")
+        # em = self.p_r_embedding(em) #r, h
+        # _, hidden = em.shape
+        # batch, _ = p_r.shape
+        # em = torch.stack([em]*batch, dim=0) # bs, r, h
+        # m = torch.stack([p_r]*hidden, dim=2) #bs, r, h
+        # m = m.float()
+        # p_r_ = torch.where(m != 0, em, m) #bs, r, h
+        # #做pooling
+        # p_r = p_r_.sum(dim=1) / p_r.sum(dim=1, keepdim=True)
+        # 直接对潜在关系采用全连接的方式， bs,r -> bs h 需要考虑到维度
+        p_r = self.p_r_embedding(p_r)
         return p_r # bs, h
     def p_r_pred(self, cls):
         #p_r:bs,seqlen,h
