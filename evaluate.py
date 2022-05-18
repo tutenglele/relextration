@@ -15,9 +15,9 @@ from dataloader import CustomDataLoader
 # load args
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=5)
+parser.add_argument('--ex_index', type=str, default=6)
 parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT*, WebNLG*")
-parser.add_argument('--mode', type=str, default="test")
+parser.add_argument('--mode', type=str, default="val")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
 parser.add_argument('--restore_file', default='last', help="name of the file containing weights to reload")
 parser.add_argument('--corres_threshold', type=float, default=0.5, help="threshold of global correspondence")
@@ -89,6 +89,7 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
                 entity.append((i, j))
         return entity
     triples=[]
+    model.eval()
     with torch.no_grad():
         head, tail, rel, cls = model.get_embed(input_id.unsqueeze(0).to("cuda"), attention_mask.unsqueeze(0).to("cuda"))
         head = head.cpu().detach().numpy()  # [1,L,H]
@@ -120,7 +121,7 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
                 so_mask.append([s_mask, o_mask])
                 s_loc.append(sub)  # s[start, end]
                 o_loc.append(o) # o[start, end]
-
+    model.eval()
     with torch.no_grad():
         p_r = model.p_r_pred(torch.tensor(rel).to("cuda"), torch.tensor(cls).to("cuda"))
         p_r = p_r.cpu().detach().numpy()
@@ -136,8 +137,9 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
         with torch.no_grad():
             p_pred = model.r_pred_from_so(entiypair=torch.Tensor(np.array(so_mask)).to("cuda").long(),#entiypair=[torch.tensor(s_loc).to("cuda").long(),torch.tensor(o_loc).to("cuda").long()]
                                           p_r_label=torch.Tensor(p_r_label).to("cuda"),
-                                        head=torch.tensor(head).to("cuda"),
-                                        tail=torch.tensor(tail).to("cuda"),
+                                          head=torch.tensor(head).to("cuda"),
+                                          tail=torch.tensor(tail).to("cuda"),
+                                          rel=torch.tensor(rel).to("cuda")
                                   ) #br
             p_pred = p_pred.cpu().detach().numpy()  # BR
 
@@ -157,7 +159,7 @@ def evaluate(model, dataloader, params, ex_params, mark='Val'):
     rel_num = params.rel_num
     correct_num, predict_num, gold_num = 0, 0, 0 #初始化
 
-    with tqdm(total=dataloader.__len__(), desc="eval", ncols=120) as t:
+    with tqdm(total=dataloader.__len__(), desc="eval", ncols=100) as t:
         for i, batch in enumerate(dataloader):
             # to device
             batch = tuple(t.to(params.device) if isinstance(t, torch.Tensor) else t for t in batch)

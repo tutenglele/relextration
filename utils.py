@@ -38,7 +38,7 @@ class Params:
 
         # learning rate
         self.fin_tuning_lr = 3e-5 #3e-5
-        self.downs_en_lr = (4e-5)*4 # (4e-5)*4  4e-4 _NYT89.8(cls直接linear，后pooling)  (4e-5)*4web0.751  改完rel0.781  改drop为0.5
+        self.downs_en_lr = (3e-5)*5 # (4e-5)*4  4e-4 _NYT89.8(cls直接linear，后pooling)  (4e-5)*4web0.751  改完rel0.781  改drop为0.5 0.75  3e-5*5&改r from so
         self.clip_grad = 2.
         self.drop_prob = 0.5  # dropout
         self.weight_decay_rate = 0.01

@@ -48,8 +48,8 @@ class Biaffine(nn.Module):
         # self.weight = nn.Parameter(torch.Tensor(out_features, in1_features + int(bias[0]),
         #                                         in2_features + int(bias[1])))
         # self.reset_parameters()
-    def reset_parameters(self):
-        nn.init.normal_(self.weight, std=0.01)
+    # def reset_parameters(self):
+    #     nn.init.normal_(self.weight, std=0.01)
     def forward(self, input1, input2): #input bs*h
         input1=input1.unsqueeze(dim=1) #bs * 1 * h
         input2=input2.unsqueeze(dim=1)
@@ -142,11 +142,11 @@ class BertForRE(BertPreTrainedModel):
         self.w2 = nn.Linear(config.hidden_size, config.hidden_size)
         self.w3 = nn.Linear(config.hidden_size, config.hidden_size)
         self.p_r_embedding = nn.Embedding(params.rel_num, config.hidden_size) #建立潜在关系查询表
-        # 主体
+        # s
         self.s_classier = nn.Linear(config.hidden_size, 2)
         #o
         self.o_classier_from_s = nn.Linear(config.hidden_size, 2)
-        # 潜在关系注意力融合 潜在关系注意力机制
+        # 潜在关系注意力融合 潜在关系注意力机制 r
         self.self_attention = Self_attention(config.hidden_size, config.hidden_size, config.hidden_size)
         self.p_classier = nn.Linear(config.hidden_size, params.rel_num)
         #基于主体和o，做双仿射关系分类
@@ -165,19 +165,11 @@ class BertForRE(BertPreTrainedModel):
             so_mask = None,
             p_r_label = None
     ):
-        """
-        Args:
-            input_ids: (batch_size, seq_len)
-            attention_mask: (batch_size, seq_len)
-            s2o_loc, #[batch, 2]
-            corres_tags: (bs, seq_len, seq_len)
-            ex_params: experiment parameters
-        """
         head, tail, rel, cls = self.get_embed(input_ids, attention_mask)
         s_pred = self.s_pred(head, cls) #bs seqlen 2
         o_pred = self.o_pred_from_s(s2o_loc, head, tail, cls) #s2o_loc bs,seqlen,2
         p_r_pred = self.p_r_pred(rel, cls)
-        r_pred= self.r_pred_from_so(so_mask, p_r_label, head, tail)
+        r_pred= self.r_pred_from_so(so_mask, p_r_label, head, tail, rel)
         return s_pred, o_pred, p_r_pred, r_pred
 
     def extract_entity(self, input, mask): # input :bs,seqlen,h  mask:bs,seqlen
@@ -225,11 +217,12 @@ class BertForRE(BertPreTrainedModel):
         obj = self.o_classier_from_s(tail+cls.unsqueeze(dim=1))
         return self.sigmoid(obj)
 
-    def r_pred_from_so(self, entiypair, p_r_label, head, tail):
+    def r_pred_from_so(self, entiypair, p_r_label, head, tail, rel):
         s_entity = self.p_r_attention(p_r_label, head, entity_mask=entiypair[:, 0])
         o_entity = self.p_r_attention(p_r_label, tail, entity_mask=entiypair[:, 1]) #bs seqlen h
-        s_entity=self.extract_entity(s_entity, entiypair[:, 0]) #BH
-        o_entity=self.extract_entity(o_entity, entiypair[:, 1]) #BH
+        emb = rel+s_entity+o_entity # emb = rel*s_entity+o_entity
+        s_entity=self.extract_entity(emb, entiypair[:, 0]) #BH
+        o_entity=self.extract_entity(emb, entiypair[:, 1]) #BH
         logist=self.biaffine(s_entity, o_entity) #bc
         r_pred=self.sigmoid(logist)
         return r_pred #BR
