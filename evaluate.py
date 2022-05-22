@@ -15,7 +15,7 @@ from dataloader import CustomDataLoader
 # load args
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=6)
+parser.add_argument('--ex_index', type=str, default=7)
 parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT*, WebNLG*")
 parser.add_argument('--mode', type=str, default="val")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")

@@ -11,10 +11,6 @@ from opt_einsum import contract
 from math import sqrt
 
 class Self_attention(nn.Module):
-    # input : batch_size * seq_len * input_dim
-    # q : batch_size * input_dim * dim_k
-    # k : batch_size * input_dim * dim_k
-    # v : batch_size * input_dim * dim_v
     def __init__(self, input_dim, dim_k, dim_v):
         super(Self_attention, self).__init__()
         # self_attention中Q与K维度一致
@@ -45,7 +41,6 @@ class Rel_embedding(nn.Module): #就是一个全连接+激活函数sigmoid
     def forward(self, input_features):
         features_tmp = self.linear(input_features)
         features_tmp = nn.ReLU()(features_tmp)
-        features_tmp = self.dropout(features_tmp)
         features_output = self.rel2hidden(features_tmp)
         return features_output
 
@@ -92,55 +87,6 @@ class Biaffine(nn.Module):
                + ', in2_features=' + str(self.in2_features) \
                + ', out_features=' + str(self.out_features) + ')'
 
-class Triaffine(nn.Module):
-    def __init__(self, in1_features, in2_features, in3_features, out_features, bias=(True, True, False)):
-        super(Triaffine, self).__init__()
-        self.in1_features = in1_features #h
-        self.in2_features = in2_features #h
-        self.in3_features = in3_features
-        self.out_features = out_features #R
-        self.bias = bias
-        self.weight = nn.Parameter(torch.Tensor(in1_features + int(bias[0]),
-                                                in3_features + int(bias[2]),
-                                                in2_features + int(bias[1]),
-                                                out_features))
-        # self.linear_input_size = in1_features + int(bias[0])
-        # self.linear_output_size = out_features * (in2_features + int(bias[1])) * in3_features  # 3-dim -> 2-dim #(h+1)*R
-        # self.linear = nn.Linear(in_features=self.linear_input_size,
-        #                         out_features=self.linear_output_size, #h+1 -> (h+1)*R
-        #                         bias=False)
-    def reset_parameters(self):
-        nn.init.normal_(self.weight, std=0.01)
-    def forward(self, input1, input2, input3): #input bs*h
-        input1 = input1.unsqueeze(dim=1) #bs * 1 * h
-        input2 = input2.unsqueeze(dim=1)
-        input3 = input3.unsqueeze(dim=1)
-        batch_size, _, dim1 = input1.size()
-        _, _, dim2 = input2.size()
-        _, _, dim3 = input3.size()
-        if self.bias[0]:
-            ones = input1.data.new(batch_size, 1,1).zero_().fill_(1)
-            input1 = torch.cat((input1, Variable(ones)), dim=2)# input bs,1,h -> bs, 1, h+1, 新的一维都是1
-            dim1 += 1
-        if self.bias[1]:
-            ones = input2.data.new(batch_size, 1,1).zero_().fill_(1)
-            input2 = torch.cat((input2, Variable(ones)), dim=2)
-            dim2 += 1
-        if self.bias[2]:
-            ones = input3.data.new(batch_size, 1, 1).zero_().fill_(1)
-            input3 = torch.cat((input3, Variable(ones)), dim=2)
-            dim3 += 1
-        s = contract('bxi,bzk,ikjr,byj->bxyzr', input1, input3, self.weight, input2) #bs 1,h+1, bs 1 h  ->bs,1,1,r
-        return s.squeeze(dim=1).squeeze(dim=1).squeeze(dim=1)
-        # affine = self.linear(input1) # bs,1,h+1 -> bs,1,（h+1)*r*h
-        # affine = affine.view(batch_size, self.out_features+dim3, dim2) #  bs,r+h,h+1
-        # input2 = torch.transpose(input2, 1, 2) #将input2的1维和2维进行转置 bs,1,h+1 -> bs,h+1,1
-        # biaffine = torch.transpose(torch.bmm(affine, input2), 1, 2).view(batch_size, self.out_features, dim3) #做矩阵乘法 bs, r, 1 -> bs, 1, r
-        # input3 = torch.transpose(input3, 1, 2) # bs, h, 1
-        # triaffine = torch.transpose(torch.bmm(biaffine, input3), 1, 2) #bs , 1, r
-        # triaffine = triaffine.contiguous().view(batch_size, 1, 1, self.out_features) #contiguous方法改变了多维数组在内存中的存储顺序，以便配合view方法使用
-        # return triaffine.squeeze(dim=1).squeeze(dim=1) #bs r
-
 class BertForRE(BertPreTrainedModel):
     """
     Bert-based的模型，包括预训练模型和下游任务模型都是基于BertPreTrainedModel类，用于初始化权重参数和加载预训练描述。
@@ -178,7 +124,6 @@ class BertForRE(BertPreTrainedModel):
             input_ids=None,
             attention_mask=None,
             s2o_loc=None, #[batch, 2] #改为使用s mask
-            entiypair=None, #[sub_id, obj_id]用来预测r 改为使用s_mask, o_mask
             so_mask = None,
             p_r_label = None
     ):

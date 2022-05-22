@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser()
 parser = argparse.ArgumentParser()
 parser.add_argument('--min_num', default=1e-7, type=float)
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=7)
+parser.add_argument('--ex_index', type=str, default=8)
 parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT*, WebNLG*")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
 parser.add_argument('--epoch_num',  type=int, default=100, help="number of epochs") #required=True,
@@ -68,11 +68,10 @@ def train(model, dataloader, optimizer, scheduler,losstor, p_r_lossor, params, e
     with tqdm(total=dataloader.__len__(), desc="train", ncols=150) as t:
         for i, batch in enumerate(dataloader):
             batch = [d.to("cuda") for d in batch]
-            batch_input_ids, batch_attention_mask, batch_sub_labels, batch_s_mask, batch_s2o_loc, batch_obj_labels, batch_sub_ids, \
-            batch_obj_ids, batch_p_r, batch_rel, batch_so_mask = batch #句子id，attentionmask，
+            batch_input_ids, batch_attention_mask, batch_sub_labels, batch_s_mask, batch_obj_labels, batch_p_r, batch_rel, batch_so_mask = batch #句子id，attentionmask，
 
             s_pred, o_pred, p_r_pred, r_pred = model(batch_input_ids, batch_attention_mask,  # bs,seqlen,2   r_pred bs,r
-                  batch_s_mask, entiypair=[batch_sub_ids,batch_obj_ids], so_mask=batch_so_mask, p_r_label=batch_p_r)
+                  batch_s_mask, so_mask=batch_so_mask, p_r_label=batch_p_r)
 
             # 计算损失
             def get_loss(target, pred, mask):  # target 的维度【bs, seq_len, h】

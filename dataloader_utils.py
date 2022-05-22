@@ -36,10 +36,7 @@ class InputFeatures(object):
                  triples=None,
                  sub_labels=None,
                  s_mask=None,
-                 s2o_loc=None,
                  obj_labels=None,
-                 sub_id = None,
-                 obj_id = None,
                  p_r = None,
                  r = None,
                  so_mask = None
@@ -49,11 +46,8 @@ class InputFeatures(object):
         self.attention_mask = attention_mask
         self.triples = triples
         self.sub_labels = sub_labels
-        self.s2o_loc = s2o_loc
         self.obj_labels = obj_labels
         self.s_mask = s_mask
-        self.sub_id = sub_id
-        self.obj_id = obj_id
         self.p_r = p_r
         self.r = r
         self.so_mask = so_mask
@@ -104,7 +98,6 @@ def convert(example, max_text_len, tokenizer, rel2idx, data_sign, ex_params):
     if data_sign == 'train':
         sub_feats = []
         s2op_map = {}
-
         p_r = np.zeros(len(rel2idx))
         for en_pair, rel in zip(example.en_pair_list, example.re_list):
             sub_token = tokenizer.tokenize(en_pair[0])
@@ -124,47 +117,48 @@ def convert(example, max_text_len, tokenizer, rel2idx, data_sign, ex_params):
             for s in s2op_map: #s(start, end)
                 sub_labels[s[0], 0] = 1
                 sub_labels[s[1], 1] = 1
-            # batch_s2o_loc 和 object_labels :o_pred阶段使用
+            # s_mask 和 object_labels :o_pred阶段使用
             start, end = np.array(list(s2op_map.keys())).T
-            start = np.random.choice(start)
-            end = np.random.choice(end[end >= start])
-            s2o_loc = (start, end) # 作为预测o的sub，维度为batch，2
-            s_mask = np.zeros(len(input_ids))
-            s_mask[start : end + 1] = 1
-            obj_labels = np.zeros((len(input_ids), 2))
-            if s2o_loc in s2op_map:
-                for item in s2op_map[s2o_loc]:
-                    o1, o2, _ = item
-                    obj_labels[o1, 0] = 1
-                    obj_labels[o2, 1] = 1
+            for s_start in start:
+                e_end = np.random.choice(end[end >= s_start])
+                s2o_loc = (s_start, e_end)
+                s_mask = np.zeros(len(input_ids))
+                s_mask[s_start: e_end+1] = 1
+                obj_labels = np.zeros((len(input_ids), 2))
 
-            # sub_id \ obj_id \ r ：p_pred阶段使用
-            sub_id = random.choice(list(s2op_map.keys()))
-            os, oe, _ = random.choice(s2op_map[sub_id])
-            obj_id = (os, oe)
-            r = np.zeros(len(rel2idx))
-            if sub_id in s2op_map:
-                for o1, o2, the_r in s2op_map[sub_id]:
-                    if o1 == obj_id[0] and o2 == obj_id[1]:
-                        r[the_r] = 1
-            # so_mask
-            so_mask = np.zeros((len(input_ids), 2)) #分别存储sub, obj
-            so_mask[sub_id[0]:sub_id[1] + 1, 0] = 1
-            so_mask[obj_id[0]:obj_id[1] + 1, 1] = 1
-            sub_feats=[InputFeatures(
-                input_tokens=text_tokens,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                sub_labels=sub_labels, #(seqlen, 2)
-                s2o_loc=s2o_loc, # 用来预测的s （start, end）
-                s_mask=s_mask,
-                obj_labels=obj_labels, #(seqlen, 2)
-                sub_id=sub_id, #(start, end)
-                obj_id=obj_id, #(start, end)
-                p_r=p_r,
-                r=r,
-                so_mask=so_mask.T
-            )]
+                if s2o_loc in s2op_map: #如果随机选择主语存在
+                    for item in s2op_map[s2o_loc]:
+                        o1, o2, _ = item
+                        obj_labels[o1, 0] = 1
+                        obj_labels[o2, 1] = 1
+                        # print("obj_labels : ", obj_labels)
+                #改为随机抽取 o1, o2
+                sub_id = random.choice(list(s2op_map.keys()))
+                os, oe, _ = random.choice(s2op_map[sub_id])
+                obj_id = (os, oe)
+                r = np.zeros(len(rel2idx))
+                if sub_id in s2op_map:
+                    for o1_, o2_, the_r in s2op_map[sub_id]:
+                        if o1_ == obj_id[0] and o2_ == obj_id[1]:
+                            r[the_r] = 1
+                so_mask = np.zeros((len(input_ids), 2)) #分别存储sub, obj
+                so_mask[sub_id[0]:sub_id[1] + 1, 0] = 1
+                so_mask[obj_id[0]:obj_id[1] + 1, 1] = 1
+                sub_feats.append(InputFeatures(
+                    input_tokens=text_tokens,
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    sub_labels=sub_labels,  # (seqlen, 2)
+                    s_mask=s_mask,
+                    obj_labels=obj_labels,  # (seqlen, 2)
+                    p_r=p_r,
+                    r=r,
+                    so_mask=so_mask.T
+                ))
+                # 两个独立的任务 ->obj  ->r 采用负样本的话，先用set集合得到sub集合， obj集合
+                #正样本，1，sub -> obj 2，sub,obj->rel
+                #负样本 1 no-sub -> 0 2.no_sub,obj->0 3,no_sub,no_obj ->0, 4  sub,no_obj->0
+                #负样本集合 negset
 
     # val and test data
     else:
@@ -173,7 +167,6 @@ def convert(example, max_text_len, tokenizer, rel2idx, data_sign, ex_params):
             triple = (tokenizer.tokenize(en[0]), rel, tokenizer.tokenize(en[1]))
             sub_head_idx = find_head_idx(text_tokens, triple[0])
             obj_head_idx = find_head_idx(text_tokens, triple[2])
-
             if sub_head_idx != -1 and obj_head_idx != -1:
                 sub = (sub_head_idx, sub_head_idx + len(triple[0]) - 1) #存了sub的头和尾位置
                 obj = (obj_head_idx, obj_head_idx + len(triple[2]) - 1)

@@ -1,6 +1,4 @@
 import os
-import torch
-import os
 import json
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Dataset
@@ -45,15 +43,12 @@ class CustomDataLoader(object):
         input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
         attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
         sub_labels = torch.tensor([f.sub_labels for f in features], dtype=torch.long)
-        s2o_loc = torch.tensor([f.s2o_loc for f in features], dtype=torch.long)
         obj_labels = torch.tensor([f.obj_labels for f in features], dtype=torch.long)
-        sub_id = torch.tensor([f.sub_id for f in features], dtype=torch.long)
-        obj_id = torch.tensor([f.obj_id for f in features], dtype=torch.long)
         s_mask = torch.tensor([f.s_mask for f in features], dtype=torch.long)
         p_r = torch.tensor([f.p_r for f in features], dtype=torch.long)
         rel = torch.tensor([f.r for f in features], dtype=torch.long)
         so_mask = torch.tensor([f.so_mask for f in features], dtype=torch.long)
-        tensors = [input_ids, attention_mask, sub_labels, s_mask, s2o_loc, obj_labels, sub_id, obj_id, p_r, rel, so_mask]
+        tensors = [input_ids, attention_mask, sub_labels, s_mask, obj_labels, p_r, rel, so_mask]
         return tensors
 
     @staticmethod
@@ -133,40 +128,38 @@ class CustomDataLoader(object):
 
 if __name__ == '__main__':
     from utils import Params
-    params = Params(corpus_type='NYT')
+    params = Params(corpus_type='WebNLG')
     ex_params = {
        'ensure_rel': True
     }
     dataloader = CustomDataLoader(params)
     feats = dataloader.get_features(ex_params=ex_params, data_sign='train')
 
-    # val_data = dataloader.get_dataloader("train", ex_params)
+    val_data = dataloader.get_dataloader("train", ex_params)
+    print(len(val_data))
 
-    # print(len(val_data))
-    print(len(feats))
-    # for i, batch_val_data in enumerate(val_data):
-    #     batch_input_token, batch_input_ids, batch_attention_mask, batch_triples = batch_val_data
-    #     if i==0 :
-    #         for token, ids, mask, triple in zip(batch_input_token, batch_input_ids, batch_attention_mask, batch_triples):
-    #             print(token)
-    #             print(mask)
-    #             print(triple)
-    #             t = ids.unsqueeze(0)
-    #             print(t.shape)
-    #             print(ids.shape)
-    #             print(ids)
-    #             print(t)
-    #             print("*****************************")
+    for data in val_data:
+        batch_input_ids, batch_attention_mask, batch_sub_labels, batch_s_mask, batch_obj_labels,\
+        batch_p_r, batch_rel, batch_so_mask = data
+
+        print(batch_input_ids[0])
+        print(batch_sub_labels[0])
+        print(batch_s_mask[0])
+        print(batch_obj_labels[0])
+        print(batch_p_r[0])
+        print(batch_rel[0])
+        print(batch_so_mask[0])
+        # print(len(val_data))
+        print(len(feats))
+        break
+
     print(feats[0].input_tokens)
     print(feats[0].input_ids)
     print(feats[0].triples)
     print(feats[0].attention_mask)
     print(feats[0].sub_labels)
     print(feats[0].s_mask)
-    print(feats[0].s2o_loc)
     print(feats[0].obj_labels)
-    print(feats[0].sub_id)
-    print(feats[0].obj_id)
     print(feats[9].r)
     print(feats[9].p_r)
     print("p_r.size  ", feats[0].p_r.size)
