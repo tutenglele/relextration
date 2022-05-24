@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torch.autograd import Variable
-from transformers import RobertaModel
 from transformers import BertPreTrainedModel, BertModel
 from opt_einsum import contract
 from math import sqrt
@@ -56,11 +55,6 @@ class Biaffine(nn.Module):
         self.linear = nn.Linear(in_features=self.linear_input_size,
                                 out_features=self.linear_output_size, #h+1 -> (h+1)*R
                                 bias=False)
-        # self.weight = nn.Parameter(torch.Tensor(out_features, in1_features + int(bias[0]),
-        #                                         in2_features + int(bias[1])))
-        # self.reset_parameters()
-    # def reset_parameters(self):
-    #     nn.init.normal_(self.weight, std=0.01)
     def forward(self, input1, input2): #input bs*h
         input1=input1.unsqueeze(dim=1) #bs * 1 * h
         input2=input2.unsqueeze(dim=1)
@@ -103,6 +97,7 @@ class BertForRE(BertPreTrainedModel):
         self.w1 = nn.Linear(config.hidden_size, config.hidden_size)
         self.w2 = nn.Linear(config.hidden_size, config.hidden_size)
         self.w3 = nn.Linear(config.hidden_size, config.hidden_size)
+        self.w4 = nn.Linear(config.hidden_size, config.hidden_size)
         # self.p_r_embedding = nn.Embedding(params.rel_num, config.hidden_size) #建立潜在关系查询表
         self.p_r_embedding = Rel_embedding(params.rel_num, config.hidden_size, params.drop_prob)
         # s
@@ -119,6 +114,7 @@ class BertForRE(BertPreTrainedModel):
         self.sigmoid = nn.Sigmoid()
         self.init_weights()
 
+
     def forward(
             self,
             input_ids=None,
@@ -127,16 +123,16 @@ class BertForRE(BertPreTrainedModel):
             so_mask = None,
             p_r_label = None
     ):
-        head, tail, rel, cls = self.get_embed(input_ids, attention_mask)
+        head, tail, p_rel, rel, cls = self.get_embed(input_ids, attention_mask)
         s_pred = self.s_pred(head, cls) #bs seqlen 2
         o_pred = self.o_pred_from_s(s2o_loc, head, tail, cls) #s2o_loc bs,seqlen,2
-        p_r_pred = self.p_r_pred(rel, cls)
+        p_r_pred = self.p_r_pred(p_rel, cls)
         r_pred= self.r_pred_from_so(so_mask, p_r_label, head, tail, rel)
         return s_pred, o_pred, p_r_pred, r_pred
 
     def extract_entity(self, input, mask): # input :bs,seqlen,h  mask:bs,seqlen
         _, _, dim = input.shape
-        entity = input * mask.unsqueeze(dim=-1)
+        entity = input * mask.unsqueeze(dim=-1) #bs seqlen, h
         entity = entity.sum(dim=1) / mask.sum(dim=-1, keepdim=True)  # BH/B1
         return entity #bs h
     def get_p_r_embedding(self, p_r):
@@ -153,20 +149,20 @@ class BertForRE(BertPreTrainedModel):
         # p_r = p_r_.sum(dim=1) / p_r.sum(dim=1, keepdim=True)
         # 直接对潜在关系采用全连接的方式， bs,r -> bs h 需要考虑到维度
         p_r = self.p_r_embedding(p_r.float())
-        return p_r # bs, h
+        return self.dropout(p_r) # bs, h
     def p_r_pred(self, p_r, cls):
         #p_r:bs,seqlen,h
         p_r = p_r.mean(dim=1)+cls
         p_r = self.p_classier(p_r)
         return self.sigmoid(p_r)
 
-    def p_r_attention(self, rel, sub, entity_mask):
+    def p_r_attention(self, p_rel, rel, sub, entity_mask):
         # sub :bs,seqlen,h   rel:bs, seqle
-        p_r = self.get_p_r_embedding(rel)
-        entity = self.extract_entity(sub, entity_mask)
-        p_r_entity = p_r + entity # bs h
+        p_r = self.get_p_r_embedding(p_rel)
+        entity = self.extract_entity(rel, entity_mask)
+        p_r_entity = p_r * entity # bs h + bs h #实体和关系融合 # 将融合向量的方法换成*precision: 0.852; recall: 0.837; f1: 0.845
         p_r_entity = p_r_entity.unsqueeze(dim=1)
-        p_entity = self.self_attention(sub + p_r_entity)
+        p_entity = self.self_attention(sub + p_r_entity) # self attention提高句子表征能力
         return p_entity
 
     def s_pred(self, head, cls):
@@ -182,14 +178,16 @@ class BertForRE(BertPreTrainedModel):
         return self.sigmoid(obj)
 
     def r_pred_from_so(self, entiypair, p_r_label, head, tail, rel):
-        s_entity = self.p_r_attention(p_r_label, head, entity_mask=entiypair[:, 0])
-        o_entity = self.p_r_attention(p_r_label, tail, entity_mask=entiypair[:, 1]) #bs seqlen h
-        emb = rel+s_entity+o_entity # emb = rel*s_entity+o_entity
-        s_entity=self.extract_entity(emb, entiypair[:, 0]) #BH
-        o_entity=self.extract_entity(emb, entiypair[:, 1]) #BH
+        s_entity = self.p_r_attention(p_r_label, rel, head, entity_mask=entiypair[:, 0])
+        o_entity = self.p_r_attention(p_r_label, rel, tail, entity_mask=entiypair[:, 1]) #bs seqlen h
+        s_entity = s_entity.mean(dim=1)
+        o_entity = o_entity.mean(dim=1) # precision: 0.884; recall: 0.848; f1: 0.866
+        # s_entity = self.extract_entity(s_entity, entiypair[:, 0]) #precision: 0.870; recall: 0.854; f1: 0.862
+        # o_entity = self.extract_entity(o_entity, entiypair[:, 1])
         logist=self.biaffine(s_entity, o_entity) #bc
         r_pred=self.sigmoid(logist)
         return r_pred #BR
+
 
     def get_embed(self, input_ids, attention_mask):
         # pre-train model
@@ -201,15 +199,14 @@ class BertForRE(BertPreTrainedModel):
         sequence_output = outputs[0]
         head = self.w1(sequence_output) # bs, seqlen, h
         tail = self.w2(sequence_output)
-        #rel 通过cls
-        cls = outputs[1] # bs, h
-        # rel = self.w3(self.dropout(cls)) # bs, r
         # #rel 通过sequence_output
-        rel = self.w3(sequence_output)
+        p_rel = self.w3(sequence_output)
+        rel = self.w4(sequence_output)
+        cls = outputs[1] # bs, h
         head = head + tail[:, 0, :].unsqueeze(dim=1) #tail[:,0,:]维度为bs,h, unsqueeze bs,1,h
         tail = tail + head[:, 0, :].unsqueeze(dim=1) #s,o都融合cls句子信息
-        head, tail, rel, cls = self.dropout(head), self.dropout(tail), self.dropout(rel), self.dropout(cls)
-        return head, tail, rel, cls
+        head, tail, p_rel, rel, cls = self.dropout(head), self.dropout(tail), self.dropout(p_rel), self.dropout(rel), self.dropout(cls)
+        return head, tail, p_rel, rel, cls
 
 
 if __name__ == '__main__':
