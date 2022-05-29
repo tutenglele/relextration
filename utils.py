@@ -24,7 +24,7 @@ class Params:
         self.n_gpu = torch.cuda.device_count()
         self.max_seq_length = 100
         self.data_cache = False
-        self.train_batch_size = 6 if 'WebNLG' in corpus_type else 64 #64
+        self.train_batch_size = 16 if 'WebNLG' in corpus_type else 64 #64
         self.val_batch_size = 24
         self.test_batch_size = 64
         # load label2id
@@ -34,13 +34,13 @@ class Params:
         # early stop strategy
         self.min_epoch_num = 20
         self.patience = 0.00001
-        self.patience_num = 20
+        self.patience_num = 50
 
         # learning rate
         self.fin_tuning_lr = 3e-5 #3e-5
-        self.downs_en_lr = (3e-5)*5 # (4e-5)*4  4e-4 _NYT89.8(cls直接linear，后pooling)  (4e-5)*4web0.751  改完rel0.781  改drop为0.5 0.75  3e-5*5&改r from so0.808  r提取用bertoutput效果一般0.70， 改用了rel但是潜在r用了cls0.78
+        self.downs_en_lr =(3e-5)*5 # (4e-5)*4  4e-4 _NYT89.8(cls直接linear，后pooling)  (4e-5)*4web0.751  改完rel0.781  改drop为0.5 0.75  3e-5*5&改r from so0.808  r提取用bertoutput效果一般0.70， 改用了rel但是潜在r用了cls0.78
         self.clip_grad = 2.
-        self.drop_prob = 0.5  # dropout
+        self.drop_prob = 0.1  # dropout
         self.weight_decay_rate = 0.01
         self.warmup_prop = 0.0
         self.max_grad_norm=1.0

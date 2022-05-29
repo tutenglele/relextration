@@ -20,10 +20,10 @@ parser = argparse.ArgumentParser()
 parser = argparse.ArgumentParser()
 parser.add_argument('--min_num', default=1e-7, type=float)
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=8)
-parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT*, WebNLG*")
+parser.add_argument('--ex_index', type=str, default=11)
+parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT_star, WebNLG_star")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
-parser.add_argument('--epoch_num',  type=int, default=100, help="number of epochs") #required=True,
+parser.add_argument('--epoch_num',  type=int, default=200, help="number of epochs") #required=True,
 parser.add_argument('--multi_gpu', action='store_true', help="ensure multi-gpu training")
 parser.add_argument('--restore_file', default=None, help="name of the file containing weights to reload")
 parser.add_argument('--corres_threshold', type=float, default=0.5, help="threshold of global correspondence")

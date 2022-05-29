@@ -91,9 +91,10 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
     triples=[]
     model.eval()
     with torch.no_grad():
-        head, tail, rel, cls = model.get_embed(input_id.unsqueeze(0).to("cuda"), attention_mask.unsqueeze(0).to("cuda"))
+        head, tail, p_rel, rel, cls = model.get_embed(input_id.unsqueeze(0).to("cuda"), attention_mask.unsqueeze(0).to("cuda"))
         head = head.cpu().detach().numpy()  # [1,L,H]
         tail = tail.cpu().detach().numpy()
+        p_rel = p_rel.cpu().detach().numpy()
         rel = rel.cpu().detach().numpy()
         cls = cls.cpu().detach().numpy()
         s_preds = model.s_pred(torch.tensor(head).to("cuda"), torch.tensor(cls).to("cuda"))
@@ -123,7 +124,7 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
                 o_loc.append(o) # o[start, end]
     model.eval()
     with torch.no_grad():
-        p_r = model.p_r_pred(torch.tensor(rel).to("cuda"), torch.tensor(cls).to("cuda"))
+        p_r = model.p_r_pred(torch.tensor(p_rel).to("cuda"), torch.tensor(cls).to("cuda"))
         p_r = p_r.cpu().detach().numpy()
         p_r_label = np.where(p_r>0.5, np.ones(p_r.shape), np.zeros(p_r.shape))
         # print("p_r: ", p_r_label)
@@ -131,6 +132,7 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
         # 复制多份head
         head = np.repeat(head, len(s_loc), 0)
         tail = np.repeat(tail, len(s_loc), 0)
+        rel = np.repeat(rel, len(s_loc), 0)
         p_r_label = np.repeat(p_r_label, len(s_loc), 0)
         # 传入subject，object 抽取predicate
         model.eval()
