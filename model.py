@@ -19,33 +19,14 @@ class Attention_net(nn.Module):
         self.Ws = nn.Linear(self.subinput, self.output)
         self.Wv = nn.Linear(self.output, self.output)
     def forward(self, rel, sub):
-        rel_ = self.Wr(rel)
-        sub_ = self.Ws(sub)
-        alpha = torch.tanh(rel_ + sub_)
+        rel_ = self.Wr(rel) # bs h
+        sub_ = self.Ws(sub) # bs h
+        alpha = torch.tanh(rel_ + sub_) # bs h
         att = self.Wv(alpha) # bs h
         weight = torch.softmax(att, dim=-1) #得到注意力分布
-        res = weight * rel
+        res = weight * sub
         return res
 
-# class Self_attention(nn.Module):
-#     def __init__(self, input_dim, dim_k, dim_v):
-#         super(Self_attention, self).__init__()
-#         # self_attention中Q与K维度一致
-#         self.q = nn.Linear(input_dim, dim_k)
-#         self.k = nn.Linear(input_dim, dim_k)
-#         self.v = nn.Linear(input_dim, dim_v)
-#         self._norm_fact = 1 / sqrt(dim_k)
-#
-#     def forward(self, x):
-#         # 此处将input的矩阵x进行线性变换得到Q,K,V
-#         Q = self.q(x)  # Q: batch_size * seq_len * dim_k
-#         K = self.k(x)  # K: batch_size * seq_len * dim_k
-#         V = self.v(x)  # V: batch_size * seq_len * dim_v
-#         # 计算
-#         atten = nn.Softmax(dim=-1)(
-#             torch.bmm(Q, K.permute(0, 2, 1))) * self._norm_fact  # Q * K.T() # batch_size * seq_len * seq_len
-#         output = torch.bmm(atten, V)  # Q * K.T() * V # batch_size * seq_len * dim_v
-#         return output
 class Rel_embedding(nn.Module): #就是一个全连接+激活函数sigmoid
     def __init__(self, input_size, output_size, dropout_rate): #
         super(Rel_embedding, self).__init__()
@@ -58,7 +39,6 @@ class Rel_embedding(nn.Module): #就是一个全连接+激活函数sigmoid
 
     def forward(self, input_features):
         features_tmp = self.linear(input_features) # bs, h
-        # features_tmp = features_tmp / input_features.sum(dim=1).unsqueeze(dim=1)
         features_tmp = self.relu(features_tmp)
         # features_tmp = self.dropout(features_tmp)
         features_output = self.rel2hidden(features_tmp)
@@ -151,8 +131,8 @@ class BertForRE(BertPreTrainedModel):
         head, tail, p_rel, rel, cls = self.get_embed(input_ids, attention_mask)
         s_pred = self.s_pred(head, cls) #bs seqlen 2
         o_pred = self.o_pred_from_s(s2o_loc, head, tail, cls) #s2o_loc bs,seqlen,2
-        p_r_pred = self.p_r_pred(p_rel, cls)
-        r_pred= self.r_pred_from_so(so_mask, p_r_label, head, tail, rel)
+        p_r_pred = self.p_r_pred(p_rel, attention_mask, cls)
+        r_pred= self.r_pred_from_so(so_mask, p_r_label, head, tail, rel, attention_mask)
         return s_pred, o_pred, p_r_pred, r_pred
 
     def extract_entity(self, input, mask): # input :bs,seqlen,h  mask:bs,seqlen
@@ -175,11 +155,12 @@ class BertForRE(BertPreTrainedModel):
         # 直接对潜在关系采用全连接的方式， bs,r -> bs h 需要考虑到维度
         p_r = self.p_r_embedding(p_r.float())
         return self.dropout(p_r) # bs, h
-    def p_r_pred(self, p_r, cls):
+    def p_r_pred(self, p_r, mask, cls):
         #p_r:bs,seqlen,h
-        p_r = p_r.mean(dim=1)+cls
-        p_r = self.p_classier(p_r)
-        return self.sigmoid(p_r)
+        # p_r = p_r.mean(dim=1)+cls
+        p_r_ = self.masked_mean(p_r, mask) + cls
+        p_r_ = self.p_classier(p_r_)
+        return self.sigmoid(p_r_)
 
     # def p_r_attention(self, p_rel, rel, sub, entity_mask):
     #     # sub :bs,seqlen,h   rel:bs, seqle
@@ -203,10 +184,10 @@ class BertForRE(BertPreTrainedModel):
         return self.sigmoid(obj)
 
     def masked_mean(self, sent, mask):
-        mask_ = mask.masked_fill(mask==0, -1e9)
+        mask_ = mask.masked_fill(mask==0, -1e9).float()
         score = torch.softmax(mask_, -1)
         return torch.matmul(score.unsqueeze(1), sent).squeeze(1)
-    def r_pred_from_so(self, entiypair, p_r_label, head, tail, rel):
+    def r_pred_from_so(self, entiypair, p_r_label, head, tail, rel, mask):
         # s_entity = self.p_r_attention(p_r_label, rel, head, entity_mask=entiypair[:, 0])
         # o_entity = self.p_r_attention(p_r_label, rel, tail, entity_mask=entiypair[:, 1]) #bs seqlen h
         # s_entity = s_entity.mean(dim=1)
@@ -218,10 +199,12 @@ class BertForRE(BertPreTrainedModel):
         o_entity = self.extract_entity(rel, entiypair[:, 1])
         p_r = self.get_p_r_embedding(p_r_label)
 
-        p_r_sub = self.attention_net(p_r, head.sum(dim=1))#p_r + head.sum(dim=1)
-        p_r_obj = self.attention_net(p_r, tail.sum(dim=1))#p_r + tail.sum(dim=1)
+        # p_r_sub = self.attention_net(p_r, head.sum(dim=1))#p_r + head.sum(dim=1)
+        # p_r_obj = self.attention_net(p_r, tail.sum(dim=1))#p_r + tail.sum(dim=1)
+        p_r_sub = self.attention_net(p_r, self.extract_entity(head, entiypair[:, 0]))
+        p_r_obj = self.attention_net(p_r, self.extract_entity(tail, entiypair[:, 1]))
         s_r = self.sigmoid(self.w5(torch.cat([p_r_sub, s_entity], dim=-1)))
-        o_r = self.sigmoid(self.w6(torch.cat([p_r_obj, o_entity], dim=-1)))  #precision: 0.890; recall: 0.853; f1: 0.871 precision: 0.887; recall: 0.858; f1: 0.873  0.903; recall: 0.861; f1: 0.881    precision: 0.904; recall: 0.875; f1: 0.889
+        o_r = self.sigmoid(self.w6(torch.cat([p_r_obj, o_entity], dim=-1)))  # precision: 0.887; recall: 0.858; f1: 0.873  0.903; recall: 0.861; f1: 0.881    precision: 0.904; recall: 0.875; f1: 0.889
         s_entity = s_r * p_r_sub + (1-s_r) * s_entity
         o_entity = o_r * p_r_obj + (1-o_r) * o_entity
         logist=self.biaffine(s_entity, o_entity) #bc

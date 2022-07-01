@@ -15,9 +15,13 @@ from dataloader import CustomDataLoader
 # load args
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=7)
-parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT*, WebNLG*")
-parser.add_argument('--mode', type=str, default="val")
+parser.add_argument('--ex_index', type=str, default=17)
+##12->webNlg 0.893; recall: 0.872; f1: 0.882 13->web*0.925; recall: 0.945; f1: 0.935
+# 15->nyt 0.927; recall: 0.923; f1: 0.925; 14->nyt*-0.931; recall: 0.926; f1: 0.929
+# 16 ->nyt10
+# 17 -> nyt11
+parser.add_argument('--corpus_type', type=str, default="NYT11", help="NYT, WebNLG, NYT*, WebNLG_star")
+parser.add_argument('--mode', type=str, default="test")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
 parser.add_argument('--restore_file', default='last', help="name of the file containing weights to reload")
 parser.add_argument('--corres_threshold', type=float, default=0.5, help="threshold of global correspondence")
@@ -97,6 +101,7 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
         p_rel = p_rel.cpu().detach().numpy()
         rel = rel.cpu().detach().numpy()
         cls = cls.cpu().detach().numpy()
+        mask = attention_mask.unsqueeze(0).cpu().detach().numpy()
         s_preds = model.s_pred(torch.tensor(head).to("cuda"), torch.tensor(cls).to("cuda"))
         s_preds = s_preds.cpu().detach().numpy()  # [1,L,2]
     s = get_entity(s_preds, input_id) #s （snum, 2）
@@ -124,7 +129,7 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
                 o_loc.append(o) # o[start, end]
     model.eval()
     with torch.no_grad():
-        p_r = model.p_r_pred(torch.tensor(p_rel).to("cuda"), torch.tensor(cls).to("cuda"))
+        p_r = model.p_r_pred(torch.tensor(p_rel).to("cuda"), torch.tensor(mask).to("cuda"), torch.tensor(cls).to("cuda"))
         p_r = p_r.cpu().detach().numpy()
         p_r_label = np.where(p_r>0.5, np.ones(p_r.shape), np.zeros(p_r.shape))
         # print("p_r: ", p_r_label)
@@ -133,6 +138,7 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
         head = np.repeat(head, len(s_loc), 0)
         tail = np.repeat(tail, len(s_loc), 0)
         rel = np.repeat(rel, len(s_loc), 0)
+        mask = np.repeat(mask, len(s_loc), 0)
         p_r_label = np.repeat(p_r_label, len(s_loc), 0)
         # 传入subject，object 抽取predicate
         model.eval()
@@ -141,7 +147,8 @@ def extractspobymodel(input_token, input_id, attention_mask, model, params, ex_p
                                           p_r_label=torch.Tensor(p_r_label).to("cuda"),
                                           head=torch.tensor(head).to("cuda"),
                                           tail=torch.tensor(tail).to("cuda"),
-                                          rel=torch.tensor(rel).to("cuda")
+                                          rel=torch.tensor(rel).to("cuda"),
+                                          mask=torch.tensor(mask).to("cuda")
                                   ) #br
             p_pred = p_pred.cpu().detach().numpy()  # BR
 
@@ -175,8 +182,8 @@ def evaluate(model, dataloader, params, ex_params, mark='Val'):
                 pretriples, p_r_label = extractspobymodel(input_token, input_ids, attention_mask, model, params,
                                                ex_params)
                 # print("true: ", triple)
-                # print("pri: ", pretriples)
-
+                # print("pre:  ", pretriples)
+                # print("p_r_label: ", p_r_label)
                 correct_num += len(set(pretriples) & set(triple))
                 predict_num += len(set(pretriples)) #预测的
                 gold_num += len(set(triple)) #真实

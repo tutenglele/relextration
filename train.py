@@ -20,8 +20,8 @@ parser = argparse.ArgumentParser()
 parser = argparse.ArgumentParser()
 parser.add_argument('--min_num', default=1e-7, type=float)
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=11)
-parser.add_argument('--corpus_type', type=str, default="WebNLG", help="NYT, WebNLG, NYT_star, WebNLG_star")
+parser.add_argument('--ex_index', type=str, default=18)
+parser.add_argument('--corpus_type', type=str, default="NYT11", help="NYT, WebNLG, NYT_star, WebNLG_star")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
 parser.add_argument('--epoch_num',  type=int, default=200, help="number of epochs") #required=True,
 parser.add_argument('--multi_gpu', action='store_true', help="ensure multi-gpu training")
@@ -33,6 +33,9 @@ parser.add_argument('--ensure_rel', action='store_true', help="relation judgemen
 parser.add_argument('--emb_fusion', type=str, default="concat", help="way to embedding")
 parser.add_argument('--num_negs', type=int, default=4,
                     help="number of negative sample when ablate relation judgement")
+
+parser.add_argument('--better_CE', default=True, type=bool, help='Use loss function based on confidence threshold')
+parser.add_argument('--conf_value', default=0.1, type=float, help='confidence threshold')
 class CE():
     def __call__(self,args,targets, pred, from_logist=False):
         '''
@@ -42,6 +45,7 @@ class CE():
         :param from_logist:是否没有经过softmax/sigmoid
         :return: loss.shape==targets.shape==pred.shape
         '''
+        c = torch.tensor(args.conf_value).to("cuda")  # 固定conf_value
         if not from_logist: # 默认这里是true
             '''返回到没有经过softmax/sigmoid得张量'''
             # 截取pred，防止趋近于0或1,保持在[min_num,1-min_num]
@@ -51,6 +55,21 @@ class CE():
         relu = nn.ReLU()
         # 计算传统的交叉熵loss
         loss = relu(pred) - pred * targets + torch.log(1 + torch.exp(-1 * torch.abs(pred).to("cuda"))).to("cuda")
+        if args.better_CE:
+            # 重新获得概率
+            sigmoid = nn.Sigmoid()
+            pred = sigmoid(pred)
+            # 是否预测正确
+            pred_res_1 = (((pred - 0.5) * (targets - 0.5)) > 0)
+            # 是否预测结果自信
+            pred_res_2 = torch.abs(pred - 0.5).to("cuda") > c
+            # 设置loss权重矩阵
+            # 预测错误的权重为1
+            shape = loss.shape
+            weight = torch.ones(shape).to("cuda")
+            # 预测正确且自信，权重为0
+            weight = torch.where((pred_res_1 == True) & (pred_res_2 == True), torch.zeros(shape).to("cuda"), weight).to("cuda")
+            loss = loss * weight
         return loss
 
 def train(model, dataloader, optimizer, scheduler,losstor, p_r_lossor, params, ex_params):

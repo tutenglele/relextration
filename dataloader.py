@@ -82,7 +82,7 @@ class CustomDataLoader(object):
             with open(self.data_dir / f'rel2id.json', 'r', encoding='utf-8') as f_re:
                 rel2idx = json.load(f_re)[-1] #获取关系id对应表
             # get examples
-            if data_sign in ("train", "val", "test", "pseudo", 'EPO', 'SEO', 'SOO', 'Normal', '1', '2', '3', '4', '5'):
+            if data_sign in ("train", "val", "test", "pseudo", 'EPO_triples', 'SEO_triples', 'SOO_triples', 'Normal_triples', '1_triples', '2_triples', '3_triples', '4_triples', '5_triples'):
                 examples = read_examples(self.data_dir, data_sign=data_sign, rel2idx=rel2idx)
             else:
                 raise ValueError("please notice that the data can only be train/val/test!!")
@@ -117,7 +117,7 @@ class CustomDataLoader(object):
             datasampler = SequentialSampler(dataset)
             dataloader = DataLoader(dataset, sampler=datasampler, batch_size=self.val_batch_size,
                                     collate_fn=self.collate_fn_test)
-        elif data_sign in ("test", "pseudo", 'EPO', 'SEO', 'SOO', 'Normal', '1', '2', '3', '4', '5'):
+        elif data_sign in ("test", "pseudo", 'EPO_triples', 'SEO_triples', 'SOO_triples', 'Normal_triples', '1_triples', '2_triples', '3_triples', '4_triples', '5_triples'):
             datasampler = SequentialSampler(dataset)
             dataloader = DataLoader(dataset, sampler=datasampler, batch_size=self.test_batch_size,
                                     collate_fn=self.collate_fn_test)
