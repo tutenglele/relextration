@@ -15,15 +15,15 @@ from dataloader import CustomDataLoader
 # load args
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=17)
+parser.add_argument('--ex_index', type=str, default=25)
 ##12->webNlg 0.893; recall: 0.872; f1: 0.882 13->web*0.925; recall: 0.945; f1: 0.935
 # 15->nyt 0.927; recall: 0.923; f1: 0.925; 14->nyt*-0.931; recall: 0.926; f1: 0.929
 # 16 ->nyt10
 # 17 -> nyt11
-parser.add_argument('--corpus_type', type=str, default="NYT11", help="NYT, WebNLG, NYT*, WebNLG_star")
+parser.add_argument('--corpus_type', type=str, default="WebNLG_star", help="NYT, WebNLG, NYT*, WebNLG_star")
 parser.add_argument('--mode', type=str, default="test")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
-parser.add_argument('--restore_file', default='last', help="name of the file containing weights to reload")
+parser.add_argument('--restore_file', default='best', help="name of the file containing weights to reload")
 parser.add_argument('--corres_threshold', type=float, default=0.5, help="threshold of global correspondence")
 parser.add_argument('--rel_threshold', type=float, default=0.5, help="threshold of relation judgement")
 parser.add_argument('--ensure_corres', action='store_true', help="correspondence ablation")

@@ -20,8 +20,8 @@ parser = argparse.ArgumentParser()
 parser = argparse.ArgumentParser()
 parser.add_argument('--min_num', default=1e-7, type=float)
 parser.add_argument('--seed', type=int, default=2022, help="random seed for initialization")
-parser.add_argument('--ex_index', type=str, default=18)
-parser.add_argument('--corpus_type', type=str, default="NYT11", help="NYT, WebNLG, NYT_star, WebNLG_star")
+parser.add_argument('--ex_index', type=str, default=28) #20 没有rel的消融 20webnlg* 21webnlg   22webnlg 23nyt 24wenblg*  没有感知机制25web* 26nyt* biaffine 27nyt*
+parser.add_argument('--corpus_type', type=str, default="WebNLG_star", help="NYT, WebNLG, NYT_star, WebNLG_star")
 parser.add_argument('--device_id', type=int, default=0, help="GPU index")
 parser.add_argument('--epoch_num',  type=int, default=200, help="number of epochs") #required=True,
 parser.add_argument('--multi_gpu', action='store_true', help="ensure multi-gpu training")

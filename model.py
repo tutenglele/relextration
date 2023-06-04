@@ -111,6 +111,7 @@ class BertForRE(BertPreTrainedModel):
         #基于主体和o，做双仿射关系分类
         #p
         self.biaffine=Biaffine(config.hidden_size, config.hidden_size, params.rel_num)
+        self.lastnet = nn.Linear(config.hidden_size, params.rel_num)
         self.sigmoid = nn.Sigmoid()
 
         # 设计一个gate网络整合两个向量
@@ -199,15 +200,18 @@ class BertForRE(BertPreTrainedModel):
         o_entity = self.extract_entity(rel, entiypair[:, 1])
         p_r = self.get_p_r_embedding(p_r_label)
 
-        # p_r_sub = self.attention_net(p_r, head.sum(dim=1))#p_r + head.sum(dim=1)
-        # p_r_obj = self.attention_net(p_r, tail.sum(dim=1))#p_r + tail.sum(dim=1)
+        ## p_r_sub = self.attention_net(p_r, head.sum(dim=1))#p_r + head.sum(dim=1)
+        ## p_r_obj = self.attention_net(p_r, tail.sum(dim=1))#p_r + tail.sum(dim=1)
         p_r_sub = self.attention_net(p_r, self.extract_entity(head, entiypair[:, 0]))
         p_r_obj = self.attention_net(p_r, self.extract_entity(tail, entiypair[:, 1]))
         s_r = self.sigmoid(self.w5(torch.cat([p_r_sub, s_entity], dim=-1)))
         o_r = self.sigmoid(self.w6(torch.cat([p_r_obj, o_entity], dim=-1)))  # precision: 0.887; recall: 0.858; f1: 0.873  0.903; recall: 0.861; f1: 0.881    precision: 0.904; recall: 0.875; f1: 0.889
         s_entity = s_r * p_r_sub + (1-s_r) * s_entity
         o_entity = o_r * p_r_obj + (1-o_r) * o_entity
-        logist=self.biaffine(s_entity, o_entity) #bc
+        s_entity = s_entity + p_r
+        o_entity = o_entity + p_r
+        # logist=self.biaffine(s_entity, o_entity) #BR
+        logist = self.lastnet(s_entity + o_entity)
         r_pred=self.sigmoid(logist)
         return r_pred #BR
 
